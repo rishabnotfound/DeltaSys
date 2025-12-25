@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Server } from '@/types';
+import '@xterm/xterm/css/xterm.css';
 
 interface TerminalProps {
   server: Server;
@@ -30,7 +31,6 @@ export default function Terminal({ server }: TerminalProps) {
       const { Terminal: XTerm } = await import('@xterm/xterm');
       const { FitAddon } = await import('@xterm/addon-fit');
       const { Unicode11Addon } = await import('@xterm/addon-unicode11');
-      await import('@xterm/xterm/css/xterm.css');
 
       term = new XTerm({
         cursorBlink: true,
