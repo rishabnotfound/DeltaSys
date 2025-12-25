@@ -45,7 +45,6 @@ A modern server management dashboard for monitoring and managing your VPS server
 <p align="center">
   <img src="https://github.com/user-attachments/assets/20992516-901c-4118-9cfc-f84371affaf8" width="900" alt="Preview 5" />
 </p>
->
 
 
 ## Quick Start
