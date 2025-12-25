@@ -20,6 +20,34 @@ A modern server management dashboard for monitoring and managing your VPS server
 - **Data Import/Export** - Backup and restore your server configurations
 - **Smart Validation** - Prevents duplicate IPs and verifies SSH credentials before saving
 
+## Preview
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/4f67151a-66f0-44a2-a292-e2686054cdb6" width="720" alt="Preview 1" />
+</p>
+
+<br/>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/3288e06f-b7c3-460c-9c57-d1f54debeead" width="310" alt="Preview 2" />
+  &nbsp;&nbsp;&nbsp;
+  <img src="https://github.com/user-attachments/assets/c0375eec-b570-4bb7-846c-2635c1130926" width="310" alt="Preview 3"/>
+</p>
+
+<br/>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/9db48703-a08f-4b5b-be1b-ce039bf173c0" width="720" alt="Preview 4" />
+</p>
+
+<br/>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/20992516-901c-4118-9cfc-f84371affaf8" width="900" alt="Preview 5" />
+</p>
+>
+
+
 ## Quick Start
 
 ```bash
@@ -85,7 +113,7 @@ export const project_name = 'DeltaSys';
 
 ## License
 
-MIT - Made with ❤️ by R
+MIT[LICENSE] - Made with ❤️ by R
 
 ## Links
 
