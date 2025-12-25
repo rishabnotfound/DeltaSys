@@ -112,7 +112,7 @@ export const project_name = 'DeltaSys';
 
 ## License
 
-MIT[LICENSE] - Made with ❤️ by R
+[MIT](LICENSE) - Made with ❤️ by R
 
 ## Links
 
