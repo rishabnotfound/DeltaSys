@@ -8,7 +8,7 @@
 
 # <p align="center">DeltaSys</p>
 
-A modern server management dashboard for monitoring and managing your VPS servers via SSH. Built with Next.js and featuring a sleek true black theme.
+A modern server management dashboard for monitoring and managing your VPS servers via SSH & Xterm.js terminal emulation.
 
 ## Features
 

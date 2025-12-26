@@ -1,1 +1,3 @@
 export const project_name = `DeltaSys`;
+export const project_description = `A modern server management dashboard for monitoring and managing your VPS servers via SSH & Xterm.js terminal emulation.`;
+export const project_keywords = `${project_name}, server management, VPS monitoring, SSH dashboard, Xterm.js, terminal emulation, server control panel, web-based server management, VPS administration, server monitoring tool`;

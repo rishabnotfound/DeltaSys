@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { Server } from '@/types';
+import FileEditor from './FileEditor';
+import Notification from './Notification';
 
 interface FileItem {
   name: string;
@@ -19,19 +21,40 @@ export default function FileExplorer({ server }: FileExplorerProps) {
   const [currentPath, setCurrentPath] = useState('/root');
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [fileContent, setFileContent] = useState('');
-  const [editing, setEditing] = useState(false);
-
-  // Modals
+  const [editingFile, setEditingFile] = useState<{ path: string; content: string } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ path: string; name: string } | null>(null);
   const [showNewFileModal, setShowNewFileModal] = useState(false);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
   const [showRenameModal, setShowRenameModal] = useState(false);
-  const [renameTarget, setRenameTarget] = useState('');
-  const [newName, setNewName] = useState('');
+  const [newItemName, setNewItemName] = useState('');
+  const [renameTarget, setRenameTarget] = useState<{ path: string; name: string } | null>(null);
+  const [operationInProgress, setOperationInProgress] = useState(false);
+
+  // Sort files by hierarchy: hidden files first, then folders (A-Z), then files (A-Z)
+  const sortFiles = (fileList: FileItem[]): FileItem[] => {
+    return [...fileList].sort((a, b) => {
+      const aIsHidden = a.name.startsWith('.');
+      const bIsHidden = b.name.startsWith('.');
+
+      // Hidden files come first
+      if (aIsHidden && !bIsHidden) return -1;
+      if (!aIsHidden && bIsHidden) return 1;
+
+      // Within same hidden status, directories come before files
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+
+      // Within same type, sort alphabetically (case-insensitive)
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+    });
+  };
 
   const loadDirectory = async (path: string) => {
     setLoading(true);
+    setOperationInProgress(true);
     try {
       const response = await fetch('/api/files', {
         method: 'POST',
@@ -48,16 +71,18 @@ export default function FileExplorer({ server }: FileExplorerProps) {
 
       const data = await response.json();
       if (data.success) {
-        setFiles(data.files);
+        setFiles(sortFiles(data.files));
         setCurrentPath(path);
       }
     } catch (error) {
       console.error('Failed to load directory:', error);
     }
     setLoading(false);
+    setOperationInProgress(false);
   };
 
   const readFile = async (path: string) => {
+    setOperationInProgress(true);
     try {
       const response = await fetch('/api/files', {
         method: 'POST',
@@ -74,45 +99,22 @@ export default function FileExplorer({ server }: FileExplorerProps) {
 
       const data = await response.json();
       if (data.success) {
-        setFileContent(data.content);
-        setEditing(true);
+        setEditingFile({ path, content: data.content });
+      } else {
+        setNotification({ message: `Failed to read file: ${data.error}`, type: 'error' });
       }
     } catch (error) {
       console.error('Failed to read file:', error);
+      setNotification({ message: 'Failed to read file', type: 'error' });
     }
+    setOperationInProgress(false);
   };
 
-  const saveFile = async () => {
-    if (!selectedFile) return;
-
-    try {
-      await fetch('/api/files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ipAddress: server.ipAddress,
-          username: server.username,
-          password: server.password,
-          port: server.port,
-          action: 'write',
-          path: selectedFile,
-          content: fileContent,
-        }),
-      });
-      alert('File saved!');
-      setEditing(false);
-      setSelectedFile(null);
-    } catch (error) {
-      console.error('Failed to save file:', error);
-      alert('Failed to save file');
-    }
-  };
 
   const deleteItem = async (path: string) => {
-    if (!confirm(`Delete ${path}?`)) return;
-
+    setOperationInProgress(true);
     try {
-      await fetch('/api/files', {
+      const response = await fetch('/api/files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -124,20 +126,43 @@ export default function FileExplorer({ server }: FileExplorerProps) {
           path,
         }),
       });
-      loadDirectory(currentPath);
+
+      const data = await response.json();
+      if (data.success) {
+        setNotification({ message: 'File deleted successfully!', type: 'success' });
+        await loadDirectory(currentPath);
+      } else {
+        setNotification({ message: `Failed to delete: ${data.error}`, type: 'error' });
+      }
     } catch (error) {
       console.error('Failed to delete:', error);
+      setNotification({ message: 'Failed to delete file', type: 'error' });
+    }
+    setOperationInProgress(false);
+  };
+
+  const handleDeleteClick = (path: string, name: string) => {
+    setDeleteTarget({ path, name });
+  };
+
+  const handleDeleteConfirm = () => {
+    if (deleteTarget) {
+      deleteItem(deleteTarget.path);
+      setDeleteTarget(null);
     }
   };
 
   const createNewFile = async () => {
-    const filename = prompt('Enter file name:');
-    if (!filename) return;
+    if (!newItemName.trim()) {
+      setNotification({ message: 'File name cannot be empty', type: 'error' });
+      return;
+    }
 
-    const fullPath = `${currentPath}/${filename}`.replace('//', '/');
+    const fullPath = `${currentPath}/${newItemName}`.replace('//', '/');
 
+    setOperationInProgress(true);
     try {
-      await fetch('/api/files', {
+      const response = await fetch('/api/files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -150,22 +175,34 @@ export default function FileExplorer({ server }: FileExplorerProps) {
           content: '',
         }),
       });
-      loadDirectory(currentPath);
-      setShowNewFileModal(false);
+
+      const data = await response.json();
+      if (data.success) {
+        setNotification({ message: 'File created successfully!', type: 'success' });
+        await loadDirectory(currentPath);
+        setShowNewFileModal(false);
+        setNewItemName('');
+      } else {
+        setNotification({ message: `Failed to create file: ${data.error}`, type: 'error' });
+      }
     } catch (error) {
       console.error('Failed to create file:', error);
-      alert('Failed to create file');
+      setNotification({ message: 'Failed to create file', type: 'error' });
     }
+    setOperationInProgress(false);
   };
 
   const createNewFolder = async () => {
-    const foldername = prompt('Enter folder name:');
-    if (!foldername) return;
+    if (!newItemName.trim()) {
+      setNotification({ message: 'Folder name cannot be empty', type: 'error' });
+      return;
+    }
 
-    const fullPath = `${currentPath}/${foldername}`.replace('//', '/');
+    const fullPath = `${currentPath}/${newItemName}`.replace('//', '/');
 
+    setOperationInProgress(true);
     try {
-      await fetch('/api/files', {
+      const response = await fetch('/api/files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -177,24 +214,49 @@ export default function FileExplorer({ server }: FileExplorerProps) {
           path: fullPath,
         }),
       });
-      loadDirectory(currentPath);
-      setShowNewFolderModal(false);
+
+      const data = await response.json();
+      if (data.success) {
+        setNotification({ message: 'Folder created successfully!', type: 'success' });
+        await loadDirectory(currentPath);
+        setShowNewFolderModal(false);
+        setNewItemName('');
+      } else {
+        setNotification({ message: `Failed to create folder: ${data.error}`, type: 'error' });
+      }
     } catch (error) {
       console.error('Failed to create folder:', error);
-      alert('Failed to create folder');
+      setNotification({ message: 'Failed to create folder', type: 'error' });
     }
+    setOperationInProgress(false);
   };
 
-  const renameItem = async (oldPath: string) => {
-    const oldName = oldPath.split('/').pop() || '';
-    const newFileName = prompt('Enter new name:', oldName);
-    if (!newFileName || newFileName === oldName) return;
+  const handleRenameClick = (path: string) => {
+    const name = path.split('/').pop() || '';
+    setRenameTarget({ path, name });
+    setNewItemName(name);
+    setShowRenameModal(true);
+  };
 
-    const parentDir = oldPath.substring(0, oldPath.lastIndexOf('/'));
-    const newPath = `${parentDir}/${newFileName}`;
+  const renameItem = async () => {
+    if (!renameTarget || !newItemName.trim()) {
+      setNotification({ message: 'Name cannot be empty', type: 'error' });
+      return;
+    }
 
+    if (newItemName === renameTarget.name) {
+      setShowRenameModal(false);
+      setNewItemName('');
+      setRenameTarget(null);
+      return;
+    }
+
+    const parentDir = renameTarget.path.substring(0, renameTarget.path.lastIndexOf('/'));
+    const newPath = `${parentDir}/${newItemName}`;
+
+    setOperationInProgress(true);
     try {
-      await fetch('/api/files', {
+      const response = await fetch('/api/files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -203,15 +265,26 @@ export default function FileExplorer({ server }: FileExplorerProps) {
           password: server.password,
           port: server.port,
           action: 'rename',
-          path: oldPath,
+          path: renameTarget.path,
           newPath: newPath,
         }),
       });
-      loadDirectory(currentPath);
+
+      const data = await response.json();
+      if (data.success) {
+        setNotification({ message: 'Renamed successfully!', type: 'success' });
+        await loadDirectory(currentPath);
+        setShowRenameModal(false);
+        setNewItemName('');
+        setRenameTarget(null);
+      } else {
+        setNotification({ message: `Failed to rename: ${data.error}`, type: 'error' });
+      }
     } catch (error) {
       console.error('Failed to rename:', error);
-      alert('Failed to rename');
+      setNotification({ message: 'Failed to rename', type: 'error' });
     }
+    setOperationInProgress(false);
   };
 
   useEffect(() => {
@@ -224,7 +297,6 @@ export default function FileExplorer({ server }: FileExplorerProps) {
     if (file.isDirectory) {
       loadDirectory(fullPath);
     } else {
-      setSelectedFile(fullPath);
       readFile(fullPath);
     }
   };
@@ -234,41 +306,137 @@ export default function FileExplorer({ server }: FileExplorerProps) {
     loadDirectory(parentPath);
   };
 
+  // Drag and drop handlers
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only set to false if leaving the drop zone entirely
+    if (e.currentTarget === e.target) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length === 0) return;
+
+    // Safety checks
+    const maxFileSize = 100 * 1024 * 1024; // 100MB limit per file
+    const maxTotalFiles = 10; // Max 10 files at once
+
+    if (droppedFiles.length > maxTotalFiles) {
+      setNotification({ message: `Maximum ${maxTotalFiles} files allowed at once`, type: 'error' });
+      return;
+    }
+
+    const oversizedFiles = droppedFiles.filter(file => file.size > maxFileSize);
+    if (oversizedFiles.length > 0) {
+      setNotification({
+        message: `File(s) too large. Maximum size: 100MB`,
+        type: 'error'
+      });
+      return;
+    }
+
+    setUploading(true);
+    setOperationInProgress(true);
+
+    try {
+      for (const file of droppedFiles) {
+        await uploadFile(file);
+      }
+      // Refresh directory after all uploads complete
+      await loadDirectory(currentPath);
+      setNotification({
+        message: `Successfully uploaded ${droppedFiles.length} file(s)!`,
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Upload error:', error);
+      setNotification({ message: 'Failed to upload one or more files', type: 'error' });
+    } finally {
+      setUploading(false);
+      setOperationInProgress(false);
+    }
+  };
+
+  const uploadFile = async (file: File): Promise<void> => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        // Read file as base64
+        const reader = new FileReader();
+
+        reader.onload = async () => {
+          const base64Content = reader.result as string;
+          const content = base64Content.split(',')[1]; // Remove data URL prefix
+
+          const fullPath = `${currentPath}/${file.name}`.replace('//', '/');
+
+          try {
+            const response = await fetch('/api/files', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                ipAddress: server.ipAddress,
+                username: server.username,
+                password: server.password,
+                port: server.port,
+                action: 'upload',
+                path: fullPath,
+                content: content,
+                encoding: 'base64',
+              }),
+            });
+
+            const data = await response.json();
+            if (data.success) {
+              resolve();
+            } else {
+              reject(new Error(data.error || 'Upload failed'));
+            }
+          } catch (error) {
+            reject(error);
+          }
+        };
+
+        reader.onerror = () => {
+          reject(new Error('Failed to read file'));
+        };
+
+        reader.readAsDataURL(file);
+      } catch (error) {
+        reject(error);
+      }
+    });
+  };
+
   return (
+    <>
     <div className="h-full flex flex-col bg-background">
-      {editing && selectedFile ? (
-        <div className="flex-1 flex flex-col">
-          <div className="p-3 border-b border-border flex items-center justify-between">
-            <span className="text-sm text-gray-400 font-mono">{selectedFile}</span>
-            <div className="flex gap-2">
-              <button
-                onClick={saveFile}
-                className="px-3 py-1 bg-accent hover:bg-accent-hover text-white rounded text-sm"
-              >
-                Save
-              </button>
-              <button
-                onClick={() => {
-                  setEditing(false);
-                  setSelectedFile(null);
-                }}
-                className="px-3 py-1 bg-border hover:bg-border/80 text-white rounded text-sm"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-          <textarea
-            value={fileContent}
-            onChange={(e) => setFileContent(e.target.value)}
-            className="flex-1 p-4 bg-card text-white font-mono text-sm resize-none focus:outline-none"
-            spellCheck={false}
-          />
+      {/* Loading Progress Bar */}
+      {operationInProgress && (
+        <div className="w-full h-1 bg-background overflow-hidden">
+          <div className="h-full bg-accent animate-progress-bar"></div>
         </div>
-      ) : (
-        <>
-          {/* Toolbar */}
-          <div className="p-2 border-b border-border flex items-center gap-2 flex-wrap">
+      )}
+
+      {/* Toolbar */}
+      <div className="p-2 border-b border-border flex items-center gap-2 flex-wrap">
             <button
               onClick={goUp}
               disabled={currentPath === '/'}
@@ -293,7 +461,7 @@ export default function FileExplorer({ server }: FileExplorerProps) {
             <div className="h-4 w-px bg-border mx-1" />
 
             <button
-              onClick={createNewFile}
+              onClick={() => setShowNewFileModal(true)}
               className="px-2 py-1 text-xs bg-accent/20 hover:bg-accent/30 text-accent rounded flex items-center gap-1"
               title="New File"
             >
@@ -304,7 +472,7 @@ export default function FileExplorer({ server }: FileExplorerProps) {
             </button>
 
             <button
-              onClick={createNewFolder}
+              onClick={() => setShowNewFolderModal(true)}
               className="px-2 py-1 text-xs bg-accent/20 hover:bg-accent/30 text-accent rounded flex items-center gap-1"
               title="New Folder"
             >
@@ -317,15 +485,49 @@ export default function FileExplorer({ server }: FileExplorerProps) {
             <span className="flex-1 text-xs text-gray-400 font-mono ml-2 truncate">{currentPath}</span>
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div
+            className="flex-1 overflow-y-auto relative"
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            {/* Drag overlay */}
+            {isDragging && (
+              <div className="absolute inset-0 bg-accent/20 backdrop-blur-sm z-50 flex items-center justify-center border-2 border-dashed border-accent pointer-events-none">
+                <div className="bg-card/90 rounded-xl p-6 border border-accent shadow-2xl">
+                  <svg className="w-16 h-16 text-accent mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <p className="text-white text-lg font-bold text-center">Drop files here to upload</p>
+                  <p className="text-gray-400 text-sm text-center mt-2">Max 10 files, 100MB each</p>
+                </div>
+              </div>
+            )}
+
+            {/* Upload progress indicator */}
+            {uploading && (
+              <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center">
+                <div className="bg-card rounded-xl p-6 border border-border shadow-2xl">
+                  <svg className="animate-spin h-12 w-12 text-accent mx-auto mb-3" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <p className="text-white text-lg font-bold text-center">Uploading files...</p>
+                </div>
+              </div>
+            )}
+
             {loading ? (
               <div className="p-4 text-center text-gray-400 text-sm">Loading...</div>
             ) : (
               <div className="divide-y divide-border">
-                {files.map((file, idx) => (
+                {files.map((file, idx) => {
+                  const isHidden = file.name.startsWith('.');
+                  return (
                   <div
                     key={idx}
-                    className="flex items-center gap-2 px-2 py-1.5 hover:bg-border/50 cursor-pointer group text-sm"
+                    className={`flex items-center gap-2 px-2 py-1.5 hover:bg-border/50 cursor-pointer group text-sm ${isHidden ? 'opacity-60 hover:opacity-100' : ''}`}
                   >
                     <div className="flex-1 flex items-center gap-2" onClick={() => handleFileClick(file)}>
                       {file.isDirectory ? (
@@ -338,6 +540,9 @@ export default function FileExplorer({ server }: FileExplorerProps) {
                         </svg>
                       )}
                       <span className="text-white font-mono text-xs truncate">{file.name}</span>
+                      {isHidden && (
+                        <span className="text-xs text-gray-500 px-1.5 py-0.5 bg-gray-700/30 rounded">hidden</span>
+                      )}
                       <span className="text-gray-500 text-xs ml-auto flex-shrink-0">{file.size}</span>
                     </div>
 
@@ -345,7 +550,7 @@ export default function FileExplorer({ server }: FileExplorerProps) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          renameItem(`${currentPath}/${file.name}`.replace('//', '/'));
+                          handleRenameClick(`${currentPath}/${file.name}`.replace('//', '/'));
                         }}
                         className="p-1 hover:bg-accent/20 rounded"
                         title="Rename"
@@ -357,7 +562,7 @@ export default function FileExplorer({ server }: FileExplorerProps) {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteItem(`${currentPath}/${file.name}`.replace('//', '/'));
+                          handleDeleteClick(`${currentPath}/${file.name}`.replace('//', '/'), file.name);
                         }}
                         className="p-1 hover:bg-danger/20 rounded"
                         title="Delete"
@@ -368,12 +573,167 @@ export default function FileExplorer({ server }: FileExplorerProps) {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
-        </>
-      )}
     </div>
+
+    {/* File Editor Modal */}
+    {editingFile && (
+      <FileEditor
+        server={server}
+        filePath={editingFile.path}
+        initialContent={editingFile.content}
+        onClose={() => setEditingFile(null)}
+        onSave={() => {
+          // Optionally refresh the directory after save
+          // loadDirectory(currentPath);
+        }}
+      />
+    )}
+
+    {/* Delete Confirmation Dialog */}
+    {deleteTarget && (
+      <div className="fixed inset-0 bg-black/90 z-[70] flex items-center justify-center p-4">
+        <div className="bg-card border border-border rounded-xl w-full max-w-md p-6">
+          <h3 className="text-xl font-bold text-red-500 mb-4">Delete File</h3>
+          <p className="text-white mb-6">
+            Are you sure you want to delete <span className="font-bold text-accent">"{deleteTarget.name}"</span>? This action cannot be undone.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => setDeleteTarget(null)}
+              className="px-6 py-2 bg-border hover:bg-border/80 text-white rounded-lg transition-colors font-medium"
+            >
+              No
+            </button>
+            <button
+              onClick={handleDeleteConfirm}
+              className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors font-medium"
+            >
+              Yes
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* New File Modal */}
+    {showNewFileModal && (
+      <div className="fixed inset-0 bg-black/90 z-[70] flex items-center justify-center p-4">
+        <div className="bg-card border border-border rounded-xl w-full max-w-md p-6">
+          <h3 className="text-xl font-bold text-white mb-4">Create New File</h3>
+          <input
+            type="text"
+            value={newItemName}
+            onChange={(e) => setNewItemName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && createNewFile()}
+            placeholder="Enter file name..."
+            className="w-full px-4 py-2 bg-background border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-accent mb-4"
+            autoFocus
+          />
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => {
+                setShowNewFileModal(false);
+                setNewItemName('');
+              }}
+              className="px-4 py-2 bg-border hover:bg-border/80 text-white rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={createNewFile}
+              className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors"
+            >
+              Create
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* New Folder Modal */}
+    {showNewFolderModal && (
+      <div className="fixed inset-0 bg-black/90 z-[70] flex items-center justify-center p-4">
+        <div className="bg-card border border-border rounded-xl w-full max-w-md p-6">
+          <h3 className="text-xl font-bold text-white mb-4">Create New Folder</h3>
+          <input
+            type="text"
+            value={newItemName}
+            onChange={(e) => setNewItemName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && createNewFolder()}
+            placeholder="Enter folder name..."
+            className="w-full px-4 py-2 bg-background border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-accent mb-4"
+            autoFocus
+          />
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => {
+                setShowNewFolderModal(false);
+                setNewItemName('');
+              }}
+              className="px-4 py-2 bg-border hover:bg-border/80 text-white rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={createNewFolder}
+              className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors"
+            >
+              Create
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Rename Modal */}
+    {showRenameModal && renameTarget && (
+      <div className="fixed inset-0 bg-black/90 z-[70] flex items-center justify-center p-4">
+        <div className="bg-card border border-border rounded-xl w-full max-w-md p-6">
+          <h3 className="text-xl font-bold text-white mb-4">Rename</h3>
+          <input
+            type="text"
+            value={newItemName}
+            onChange={(e) => setNewItemName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && renameItem()}
+            placeholder="Enter new name..."
+            className="w-full px-4 py-2 bg-background border border-border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-accent mb-4"
+            autoFocus
+          />
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => {
+                setShowRenameModal(false);
+                setNewItemName('');
+                setRenameTarget(null);
+              }}
+              className="px-4 py-2 bg-border hover:bg-border/80 text-white rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={renameItem}
+              className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors"
+            >
+              Rename
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Notification */}
+    {notification && (
+      <Notification
+        message={notification.message}
+        type={notification.type}
+        onClose={() => setNotification(null)}
+      />
+    )}
+    </>
   );
 }

@@ -1,13 +1,19 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { project_name } from "../config.js";
+import { project_name, project_description, project_keywords } from "../config.js";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: `${project_name} - Server Management`,
-  description: "Perfect server management dashboard with real-time monitoring and managing capabilities.",
+  title: project_name,
+  description: project_description,
+  keywords: project_keywords,
+  icons: {
+    icon: '/logo.png',
+    shortcut: '/logo.png',
+    apple: '/logo.png',
+  },
 };
 
 export default function RootLayout({

@@ -4,7 +4,7 @@ import { Server } from '@/types';
 import { formatDate, getDaysUntilExpiry, getStatusColor, getStatusBorderColor, formatUptime } from '@/lib/utils';
 import CircularProgress from './CircularProgress';
 import ConfirmationDialog from './ConfirmationDialog';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 
 interface ServerCardProps {
   server: Server;
@@ -13,18 +13,21 @@ interface ServerCardProps {
   onUpdateStats: (id: string) => void;
   onOpenManager: (server: Server) => void;
   onOpenDetails: (server: Server) => void;
+  onCopy: (message: string) => void;
   isLoading?: boolean;
 }
 
-export default function ServerCard({ server, onEdit, onDelete, onUpdateStats, onOpenManager, onOpenDetails, isLoading = false }: ServerCardProps) {
+export default function ServerCard({ server, onEdit, onDelete, onUpdateStats, onOpenManager, onOpenDetails, onCopy, isLoading = false }: ServerCardProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   const daysUntilExpiry = getDaysUntilExpiry(server.expiryDate);
   const statusColor = getStatusColor(server.expiryDate);
   const borderColor = getStatusBorderColor(server.expiryDate);
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
+    onCopy(`${label} copied to clipboard!`);
   };
 
   const handleDeleteClick = () => {
@@ -36,15 +39,51 @@ export default function ServerCard({ server, onEdit, onDelete, onUpdateStats, on
     setShowDeleteDialog(false);
   };
 
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    cardRef.current.style.setProperty('--mouse-x', `${x}px`);
+    cardRef.current.style.setProperty('--mouse-y', `${y}px`);
+  };
+
   return (
     <>
-    <div className={`bg-card border-2 ${borderColor} rounded-xl p-4 hover:border-accent/50 transition-all`}>
+    <div
+      ref={cardRef}
+      onMouseMove={handleMouseMove}
+      className="relative rounded-xl cursor-pointer group"
+      style={{
+        background: 'rgba(255, 255, 255, 0.05)',
+      }}
+    >
+      {/* Hover glow effect */}
+      <div
+        className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+        style={{
+          background: 'radial-gradient(400px circle at var(--mouse-x) var(--mouse-y), rgba(255, 255, 255, 0.06), transparent 40%)',
+          zIndex: 3,
+        }}
+      />
+
+      {/* Border glow */}
+      <div
+        className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+        style={{
+          background: 'radial-gradient(600px circle at var(--mouse-x) var(--mouse-y), rgba(255, 255, 255, 0.3), transparent 40%)',
+          zIndex: 1,
+        }}
+      />
+
+      {/* Content */}
+      <div className="relative bg-card rounded-xl p-4 m-[1px]" style={{ zIndex: 2 }}>
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
           <h3 className="text-lg font-bold text-white truncate">{server.nickname}</h3>
           <button
-            onClick={() => copyToClipboard(server.ipAddress)}
+            onClick={() => copyToClipboard(server.ipAddress, 'IP address')}
             className="text-xs text-gray-400 hover:text-accent transition-colors"
             title="Click to copy"
           >
@@ -140,8 +179,18 @@ export default function ServerCard({ server, onEdit, onDelete, onUpdateStats, on
               {showPassword ? server.password : '••••••••'}
             </p>
             <button
+              onClick={() => copyToClipboard(server.password, 'Password')}
+              className="text-gray-400 hover:text-accent transition-colors flex-shrink-0"
+              title="Copy password"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+            <button
               onClick={() => setShowPassword(!showPassword)}
               className="text-gray-400 hover:text-white transition-colors flex-shrink-0"
+              title={showPassword ? "Hide password" : "Show password"}
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {showPassword ? (
@@ -173,6 +222,7 @@ export default function ServerCard({ server, onEdit, onDelete, onUpdateStats, on
           'Update Stats'
         )}
       </button>
+      </div>
     </div>
 
     {showDeleteDialog && (

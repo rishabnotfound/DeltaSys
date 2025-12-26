@@ -10,8 +10,6 @@ export function Logo({ size = 32 }: { size?: number }) {
   );
 }
 
-
-
 export function Plus({ size = 32 }: { size?: number }) {
   return (
     <svg
@@ -42,3 +40,5 @@ export function Plus({ size = 32 }: { size?: number }) {
     </svg>
   );
 }
+
+

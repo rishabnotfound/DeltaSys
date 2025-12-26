@@ -125,6 +125,10 @@ export default function Home() {
     setServers(storage.getServers());
   };
 
+  const handleCopy = (message: string) => {
+    setNotification({ message, type: 'success' });
+  };
+
   const filteredServers = servers.filter(server =>
     server.nickname.toLowerCase().includes(searchQuery.toLowerCase()) ||
     server.ipAddress.includes(searchQuery) ||
@@ -265,6 +269,7 @@ export default function Home() {
                 onUpdateStats={handleUpdateStats}
                 onOpenManager={setManagerServer}
                 onOpenDetails={setDetailsServer}
+                onCopy={handleCopy}
                 isLoading={loadingStats.has(server.id)}
               />
             ))}

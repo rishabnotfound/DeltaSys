@@ -6,10 +6,11 @@ interface FileRequest {
   username: string;
   password: string;
   port: number;
-  action: 'list' | 'read' | 'write' | 'delete' | 'mkdir' | 'rename';
+  action: 'list' | 'read' | 'write' | 'delete' | 'mkdir' | 'rename' | 'upload';
   path: string;
   content?: string;
   newPath?: string;
+  encoding?: 'base64';
 }
 
 async function connectSSH(config: FileRequest) {
@@ -72,6 +73,38 @@ export async function POST(request: NextRequest) {
         await ssh.execCommand(`echo '${escapedContent}' > "${body.path}"`);
         ssh.dispose();
         return NextResponse.json({ success: true });
+      }
+
+      case 'upload': {
+        // Handle file upload with base64 encoding
+        if (!body.content) {
+          ssh.dispose();
+          return NextResponse.json({ success: false, error: 'No content provided' }, { status: 400 });
+        }
+
+        const tempFile = `/tmp/upload_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+        try {
+          // Write base64 content to temp file
+          await ssh.execCommand(`echo '${body.content}' | base64 -d > "${tempFile}"`);
+
+          // Move to final destination
+          await ssh.execCommand(`mv "${tempFile}" "${body.path}"`);
+
+          // Set proper permissions
+          await ssh.execCommand(`chmod 644 "${body.path}"`);
+
+          ssh.dispose();
+          return NextResponse.json({ success: true });
+        } catch (uploadError: any) {
+          // Cleanup temp file if it exists
+          await ssh.execCommand(`rm -f "${tempFile}" 2>/dev/null`);
+          ssh.dispose();
+          return NextResponse.json(
+            { success: false, error: uploadError.message || 'Upload failed' },
+            { status: 500 }
+          );
+        }
       }
 
       case 'delete': {
