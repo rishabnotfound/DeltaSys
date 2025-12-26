@@ -600,7 +600,7 @@ export default function FileExplorer({ server }: FileExplorerProps) {
         <div className="bg-card border border-border rounded-xl w-full max-w-md p-6">
           <h3 className="text-xl font-bold text-red-500 mb-4">Delete File</h3>
           <p className="text-white mb-6">
-            Are you sure you want to delete <span className="font-bold text-accent">"{deleteTarget.name}"</span>? This action cannot be undone.
+            Are you sure you want to delete <span className="font-bold text-accent">&quot;{deleteTarget.name}&quot;</span>? This action cannot be undone.
           </p>
           <div className="flex gap-3 justify-end">
             <button

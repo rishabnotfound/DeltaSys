@@ -62,11 +62,11 @@ export default function FileEditor({ server, filePath, initialContent, onClose, 
     return languageMap[ext] || 'plaintext';
   };
 
-  const handleEditorDidMount = (editor: any) => {
+  const handleEditorDidMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
 
     // Add keyboard shortcut for saving (Ctrl+S)
-    editor.addCommand(window.monaco.KeyMod.CtrlCmd | window.monaco.KeyCode.KeyS, () => {
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       handleSave();
     });
 
