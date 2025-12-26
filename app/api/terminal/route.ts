@@ -9,6 +9,12 @@ interface TerminalRequest {
   command: string;
 }
 
+const noCacheHeaders = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  'Pragma': 'no-cache',
+  'Expires': '0',
+};
+
 export async function POST(request: NextRequest) {
   let ssh: NodeSSH | null = null;
 
@@ -34,13 +40,13 @@ export async function POST(request: NextRequest) {
       stdout: result.stdout,
       stderr: result.stderr,
       code: result.code
-    });
+    }, { headers: noCacheHeaders });
   } catch (error: any) {
     console.error('Terminal command error:', error);
     if (ssh) ssh.dispose();
     return NextResponse.json(
       { success: false, error: error.message || 'Command execution failed' },
-      { status: 500 }
+      { status: 500, headers: noCacheHeaders }
     );
   }
 }

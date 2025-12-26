@@ -26,6 +26,12 @@ async function connectSSH(config: FileRequest) {
   return ssh;
 }
 
+const noCacheHeaders = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+  'Pragma': 'no-cache',
+  'Expires': '0',
+};
+
 export async function POST(request: NextRequest) {
   let ssh: NodeSSH | null = null;
 
@@ -58,13 +64,13 @@ export async function POST(request: NextRequest) {
           .filter(Boolean);
 
         ssh.dispose();
-        return NextResponse.json({ success: true, files });
+        return NextResponse.json({ success: true, files }, { headers: noCacheHeaders });
       }
 
       case 'read': {
         const result = await ssh.execCommand(`cat "${body.path}"`);
         ssh.dispose();
-        return NextResponse.json({ success: true, content: result.stdout });
+        return NextResponse.json({ success: true, content: result.stdout }, { headers: noCacheHeaders });
       }
 
       case 'write': {
@@ -72,14 +78,17 @@ export async function POST(request: NextRequest) {
         const escapedContent = body.content?.replace(/'/g, "'\\''") || '';
         await ssh.execCommand(`echo '${escapedContent}' > "${body.path}"`);
         ssh.dispose();
-        return NextResponse.json({ success: true });
+        return NextResponse.json({ success: true }, { headers: noCacheHeaders });
       }
 
       case 'upload': {
         // Handle file upload with base64 encoding
         if (!body.content) {
           ssh.dispose();
-          return NextResponse.json({ success: false, error: 'No content provided' }, { status: 400 });
+          return NextResponse.json(
+            { success: false, error: 'No content provided' },
+            { status: 400, headers: noCacheHeaders }
+          );
         }
 
         const tempFile = `/tmp/upload_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -95,14 +104,14 @@ export async function POST(request: NextRequest) {
           await ssh.execCommand(`chmod 644 "${body.path}"`);
 
           ssh.dispose();
-          return NextResponse.json({ success: true });
+          return NextResponse.json({ success: true }, { headers: noCacheHeaders });
         } catch (uploadError: any) {
           // Cleanup temp file if it exists
           await ssh.execCommand(`rm -f "${tempFile}" 2>/dev/null`);
           ssh.dispose();
           return NextResponse.json(
             { success: false, error: uploadError.message || 'Upload failed' },
-            { status: 500 }
+            { status: 500, headers: noCacheHeaders }
           );
         }
       }
@@ -110,35 +119,41 @@ export async function POST(request: NextRequest) {
       case 'delete': {
         await ssh.execCommand(`rm -rf "${body.path}"`);
         ssh.dispose();
-        return NextResponse.json({ success: true });
+        return NextResponse.json({ success: true }, { headers: noCacheHeaders });
       }
 
       case 'mkdir': {
         await ssh.execCommand(`mkdir -p "${body.path}"`);
         ssh.dispose();
-        return NextResponse.json({ success: true });
+        return NextResponse.json({ success: true }, { headers: noCacheHeaders });
       }
 
       case 'rename': {
         if (!body.newPath) {
           ssh.dispose();
-          return NextResponse.json({ success: false, error: 'New path required' }, { status: 400 });
+          return NextResponse.json(
+            { success: false, error: 'New path required' },
+            { status: 400, headers: noCacheHeaders }
+          );
         }
         await ssh.execCommand(`mv "${body.path}" "${body.newPath}"`);
         ssh.dispose();
-        return NextResponse.json({ success: true });
+        return NextResponse.json({ success: true }, { headers: noCacheHeaders });
       }
 
       default:
         ssh.dispose();
-        return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
+        return NextResponse.json(
+          { success: false, error: 'Invalid action' },
+          { status: 400, headers: noCacheHeaders }
+        );
     }
   } catch (error: any) {
     console.error('File operation error:', error);
     if (ssh) ssh.dispose();
     return NextResponse.json(
       { success: false, error: error.message || 'File operation failed' },
-      { status: 500 }
+      { status: 500, headers: noCacheHeaders }
     );
   }
 }

@@ -11,7 +11,7 @@ import ServerManager from '@/components/ServerManager';
 import DetailedStatsView from '@/components/DetailedStatsView';
 import Settings from '@/components/Settings';
 import Notification from '@/components/Notification';
-import { project_name } from '../config.js';
+import { project_name, github_repo, owner_name } from '../config.js';
 
 export default function Home() {
   const [servers, setServers] = useState<Server[]>([]);
@@ -283,10 +283,10 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-gray-400 text-sm">
               Made with <span className="text-red-500">❤️</span> by{' '}
-              <span className="text-white font-medium">R</span>
+              <span className="text-white font-medium">{owner_name}</span>
             </p>
             <a
-              href={`https://github.com/rishabnotfound/${project_name.toLowerCase()}}`}
+              href={github_repo}
               target="_blank"
               rel="noopener noreferrer"
               className="group flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
@@ -340,3 +340,8 @@ export default function Home() {
     </div>
   );
 }
+
+
+
+
+  // this project is coded by rishabnotfound

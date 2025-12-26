@@ -82,7 +82,13 @@ export async function POST(request: NextRequest) {
       lastUpdated: Date.now(),
     };
 
-    return NextResponse.json({ success: true, stats });
+    return NextResponse.json({ success: true, stats }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    });
   } catch (error: any) {
     const errorMessage = error?.message || 'Unknown error';
     const errorLevel = error?.level || 'unknown';
@@ -106,7 +112,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       { success: false, error: userMessage, details: errorMessage },
-      { status: 500 }
+      {
+        status: 500,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      }
     );
   }
 }
