@@ -646,7 +646,7 @@ export default function FileExplorer({ server, externalPath, onPathChange }: Fil
             )}
 
             {loading ? (
-              <div className="p-4 text-center text-gray-400 text-sm">Loading...</div>
+              <div className="p-4 text-center text-gray-400 text-sm">loading...</div>
             ) : (
               <div className="divide-y divide-border">
                 {files.map((file, idx) => {

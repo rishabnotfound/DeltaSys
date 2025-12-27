@@ -10,9 +10,9 @@ export const metadata: Metadata = {
   description: project_description,
   keywords: project_keywords,
   icons: {
-    icon: '/logo.png',
-    shortcut: '/logo.png',
-    apple: '/logo.png',
+    icon: '/nobg.png',
+    shortcut: '/nobg.png',
+    apple: '/nobg.png',
   },
 };
 

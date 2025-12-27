@@ -18,5 +18,6 @@ export const terminal_welcome_message = `Welcome to ${project_name} Terminal!
 Type 'help' to see available commands.
 Almost everything works like a regular Linux terminal. Enjoy!
 
-NOTE : PLEASE DO NOT USE ANY ACTIVE/INTERACTIVE COMMANDS LIKE 'top', 'htop', 'vim', 'nano', 'pm2 logs' ETC as THEY MAY CAUSE TERMINAL TO MALFUNCTION. bcz there's no socket :( 
+NOTE : PLEASE DO NOT USE ANY ACTIVE/INTERACTIVE COMMANDS LIKE 'top', 'htop', 'vim', 'nano', 'pm2 logs' ETC as THEY MAY CAUSE TERMINAL TO MALFUNCTION.
+ bcz there's no socket :( 
 `;
