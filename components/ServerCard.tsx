@@ -131,16 +131,27 @@ export default function ServerCard({ server, onEdit, onDelete, onUpdateStats, on
       </div>
 
       {/* Compact Info Grid */}
-      <div className="grid grid-cols-2 gap-2 mb-3 text-xs">
+      <div className={`grid ${server.monthlyCost ? 'grid-cols-3' : 'grid-cols-2'} gap-2 mb-3 text-xs`}>
         <div className="bg-background/50 rounded-lg p-2">
           <p className="text-gray-500 mb-0.5">Provider</p>
           <p className="text-white font-medium truncate">{server.hostingProvider}</p>
         </div>
+        {server.monthlyCost && (
+          <div className="bg-background/50 rounded-lg p-2">
+            <p className="text-gray-500 mb-0.5">Cost/mo</p>
+            <p className="text-green-400 font-bold">${server.monthlyCost.toFixed(2)}</p>
+          </div>
+        )}
         <div className="bg-background/50 rounded-lg p-2">
           <p className="text-gray-500 mb-0.5">Expiry</p>
           <p className={`font-bold ${statusColor}`}>
             {daysUntilExpiry < 0 ? 'EXPIRED' : `${daysUntilExpiry}d`}
           </p>
+          {server.renewalPeriod && server.renewalPeriod !== 'off' && (
+            <p className="text-[10px] text-gray-500 mt-0.5">
+              Auto: {server.renewalPeriod === 'monthly' ? '30d' : server.renewalPeriod === 'yearly' ? '365d' : `${server.renewalDays}d`}
+            </p>
+          )}
         </div>
       </div>
 

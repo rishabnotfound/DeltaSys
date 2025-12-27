@@ -20,6 +20,9 @@ export default function ServerForm({ server, existingServers, onSubmit, onCancel
     port: 22,
     expiryDate: '',
     hostingProvider: '',
+    monthlyCost: undefined,
+    renewalPeriod: 'off',
+    renewalDays: undefined,
   });
 
   const [errors, setErrors] = useState<Partial<ServerFormData>>({});
@@ -37,6 +40,9 @@ export default function ServerForm({ server, existingServers, onSubmit, onCancel
         port: server.port,
         expiryDate: server.expiryDate,
         hostingProvider: server.hostingProvider,
+        monthlyCost: server.monthlyCost,
+        renewalPeriod: server.renewalPeriod || 'off',
+        renewalDays: server.renewalDays,
       });
     }
   }, [server]);
@@ -279,6 +285,66 @@ export default function ServerForm({ server, existingServers, onSubmit, onCancel
               <p className="text-danger text-xs mt-1">{errors.expiryDate}</p>
             )}
           </div>
+
+          {/* Optional: Monthly Cost */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Monthly Cost (Optional)
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.monthlyCost || ''}
+                onChange={(e) => {
+                  const value = e.target.value ? parseFloat(e.target.value) : undefined;
+                  setFormData(prev => ({ ...prev, monthlyCost: value }));
+                }}
+                className="w-full pl-8 pr-4 py-2 bg-background border border-border rounded-lg text-white focus:outline-none focus:border-accent transition-colors"
+                placeholder="0.00"
+              />
+            </div>
+            <p className="text-gray-500 text-xs mt-1">Enter your monthly rental cost</p>
+          </div>
+
+          {/* Auto-Renewal Settings */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Auto-Renewal Period
+            </label>
+            <select
+              value={formData.renewalPeriod}
+              onChange={(e) => handleChange('renewalPeriod', e.target.value)}
+              className="w-full px-4 py-2 bg-background border border-border rounded-lg text-white focus:outline-none focus:border-accent transition-colors"
+            >
+              <option value="off">Off (No auto-renewal)</option>
+              <option value="monthly">Monthly (30 days)</option>
+              <option value="yearly">Yearly (365 days)</option>
+              <option value="custom">Custom days</option>
+            </select>
+            <p className="text-gray-500 text-xs mt-1">Auto-update expiry date when it passes</p>
+          </div>
+
+          {formData.renewalPeriod === 'custom' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Custom Renewal Days
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={formData.renewalDays || ''}
+                onChange={(e) => {
+                  const value = e.target.value ? parseInt(e.target.value) : undefined;
+                  setFormData(prev => ({ ...prev, renewalDays: value }));
+                }}
+                className="w-full px-4 py-2 bg-background border border-border rounded-lg text-white focus:outline-none focus:border-accent transition-colors"
+                placeholder="e.g., 90 for 3 months"
+              />
+            </div>
+          )}
 
           {verificationError && (
             <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">

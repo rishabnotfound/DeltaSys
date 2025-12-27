@@ -3,6 +3,8 @@
 import { Server } from '@/types';
 import FileExplorer from './FileExplorer';
 import Terminal from './Terminal';
+import FileEditor from './FileEditor';
+import MediaViewer from './MediaViewer';
 import { useState, useEffect } from 'react';
 
 interface ServerManagerProps {
@@ -16,6 +18,8 @@ export default function ServerManager({ server, onClose }: ServerManagerProps) {
   const [currentDirectory, setCurrentDirectory] = useState('/root');
   const [showExplorer, setShowExplorer] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
+  const [editingFile, setEditingFile] = useState<{ path: string; content: string } | null>(null);
+  const [viewingMedia, setViewingMedia] = useState<{ path: string; type: 'image' } | null>(null);
 
   // Detect screen size
   useEffect(() => {
@@ -110,6 +114,8 @@ export default function ServerManager({ server, onClose }: ServerManagerProps) {
                 server={server}
                 externalPath={currentDirectory}
                 onPathChange={setCurrentDirectory}
+                onEditFile={(path, content) => setEditingFile({ path, content })}
+                onViewMedia={(path) => setViewingMedia({ path, type: 'image' })}
               />
             )}
           </div>
@@ -146,6 +152,30 @@ export default function ServerManager({ server, onClose }: ServerManagerProps) {
           )}
         </div>
       </div>
+
+      {/* File Editor Modal - rendered at root level to avoid overflow clipping */}
+      {editingFile && (
+        <FileEditor
+          server={server}
+          filePath={editingFile.path}
+          initialContent={editingFile.content}
+          onClose={() => setEditingFile(null)}
+          onSave={() => {
+            // Optionally refresh the directory after save
+            // Could trigger a refresh in FileExplorer if needed
+          }}
+        />
+      )}
+
+      {/* Media Viewer Modal - rendered at root level to avoid overflow clipping */}
+      {viewingMedia && (
+        <MediaViewer
+          server={server}
+          filePath={viewingMedia.path}
+          fileType={viewingMedia.type}
+          onClose={() => setViewingMedia(null)}
+        />
+      )}
     </div>
   );
 }

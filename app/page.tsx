@@ -29,6 +29,63 @@ export default function Home() {
     setServers(storage.getServers());
   }, []);
 
+  // Auto-renew expired servers
+  useEffect(() => {
+    const checkAndRenewServers = () => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      let updated = false;
+      const renewedServers = servers.map(server => {
+        if (!server.renewalPeriod || server.renewalPeriod === 'off') return server;
+
+        const expiryDate = new Date(server.expiryDate);
+        expiryDate.setHours(0, 0, 0, 0);
+
+        // If expired and has auto-renewal
+        if (expiryDate < today) {
+          let renewalDays = 0;
+          if (server.renewalPeriod === 'monthly') {
+            renewalDays = 30;
+          } else if (server.renewalPeriod === 'yearly') {
+            renewalDays = 365;
+          } else if (server.renewalPeriod === 'custom' && server.renewalDays) {
+            renewalDays = server.renewalDays;
+          }
+
+          if (renewalDays > 0) {
+            const newExpiryDate = new Date(expiryDate);
+            newExpiryDate.setDate(newExpiryDate.getDate() + renewalDays);
+
+            const renewedServer = { ...server, expiryDate: newExpiryDate.toISOString().split('T')[0] };
+            storage.updateServer(server.id, renewedServer);
+            updated = true;
+
+            setNotification({
+              message: `${server.nickname} auto-renewed until ${renewedServer.expiryDate}`,
+              type: 'success'
+            });
+
+            return renewedServer;
+          }
+        }
+
+        return server;
+      });
+
+      if (updated) {
+        setServers(renewedServers);
+      }
+    };
+
+    // Check on mount
+    checkAndRenewServers();
+
+    // Check daily
+    const interval = setInterval(checkAndRenewServers, 24 * 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [servers]);
+
   const fetchServerStats = async (server: Server) => {
     try {
       const response = await fetch('/api/server-stats', {
@@ -137,6 +194,9 @@ export default function Home() {
 
   const sortedServers = sortServers(filteredServers, sortOrder);
 
+  // Calculate total cost
+  const totalCost = servers.reduce((sum, server) => sum + (server.monthlyCost || 0), 0);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Glassmorphism Navbar */}
@@ -158,6 +218,19 @@ export default function Home() {
               </div>
 
               <div className="flex items-center gap-3">
+                {/* Server Stats */}
+                <div className="hidden sm:flex items-center gap-4 px-4 py-1.5 bg-white/5 rounded-full border border-white/10">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400">Srv</span>
+                    <span className="text-sm font-bold text-white">{servers.length}</span>
+                  </div>
+                  <div className="w-px h-4 bg-white/10"></div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400">Cost</span>
+                    <span className="text-sm font-bold text-green-400">${totalCost.toFixed(2)}</span>
+                  </div>
+                </div>
+
                 <button
                   onClick={() => setShowSettings(true)}
                   className="group p-2 hover:bg-white/10 rounded-full transition-all duration-300"

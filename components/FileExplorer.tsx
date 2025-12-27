@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { Server } from '@/types';
-import FileEditor from './FileEditor';
-import MediaViewer from './MediaViewer';
 import Notification from './Notification';
 
 interface FileItem {
@@ -18,14 +16,14 @@ interface FileExplorerProps {
   server: Server;
   externalPath?: string;
   onPathChange?: (path: string) => void;
+  onEditFile?: (path: string, content: string) => void;
+  onViewMedia?: (path: string) => void;
 }
 
-export default function FileExplorer({ server, externalPath, onPathChange }: FileExplorerProps) {
+export default function FileExplorer({ server, externalPath, onPathChange, onEditFile, onViewMedia }: FileExplorerProps) {
   const [currentPath, setCurrentPath] = useState('/root');
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [editingFile, setEditingFile] = useState<{ path: string; content: string } | null>(null);
-  const [viewingMedia, setViewingMedia] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -107,7 +105,9 @@ export default function FileExplorer({ server, externalPath, onPathChange }: Fil
 
       const data = await response.json();
       if (data.success) {
-        setEditingFile({ path, content: data.content });
+        if (onEditFile) {
+          onEditFile(path, data.content);
+        }
       } else {
         setNotification({ message: `Failed to read file: ${data.error}`, type: 'error' });
       }
@@ -367,7 +367,9 @@ export default function FileExplorer({ server, externalPath, onPathChange }: Fil
         });
         return;
       }
-      setViewingMedia(fullPath);
+      if (onViewMedia) {
+        onViewMedia(fullPath);
+      }
       return;
     }
 
@@ -722,30 +724,6 @@ export default function FileExplorer({ server, externalPath, onPathChange }: Fil
             )}
           </div>
     </div>
-
-    {/* File Editor Modal */}
-    {editingFile && (
-      <FileEditor
-        server={server}
-        filePath={editingFile.path}
-        initialContent={editingFile.content}
-        onClose={() => setEditingFile(null)}
-        onSave={() => {
-          // Optionally refresh the directory after save
-          // loadDirectory(currentPath);
-        }}
-      />
-    )}
-
-    {/* Media Viewer Modal */}
-    {viewingMedia && (
-      <MediaViewer
-        server={server}
-        filePath={viewingMedia}
-        fileType="image"
-        onClose={() => setViewingMedia(null)}
-      />
-    )}
 
     {/* Delete Confirmation Dialog */}
     {deleteTarget && (

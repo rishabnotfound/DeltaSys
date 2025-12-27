@@ -25,6 +25,9 @@ export interface Server {
   port: number;
   expiryDate: string;
   hostingProvider: string;
+  monthlyCost?: number;
+  renewalPeriod?: 'off' | 'monthly' | 'yearly' | 'custom';
+  renewalDays?: number;
   stats: ServerStats;
   createdAt: number;
 }
@@ -39,4 +42,7 @@ export interface ServerFormData {
   port: number;
   expiryDate: string;
   hostingProvider: string;
+  monthlyCost?: number;
+  renewalPeriod?: 'off' | 'monthly' | 'yearly' | 'custom';
+  renewalDays?: number;
 }
