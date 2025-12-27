@@ -297,6 +297,7 @@ export default function FileExplorer({ server, externalPath, onPathChange }: Fil
 
   useEffect(() => {
     loadDirectory(currentPath);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Sync with external path changes (from Terminal cd commands)
@@ -304,6 +305,7 @@ export default function FileExplorer({ server, externalPath, onPathChange }: Fil
     if (externalPath && externalPath !== currentPath) {
       loadDirectory(externalPath);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [externalPath]);
 
   const isImageFile = (filename: string): boolean => {

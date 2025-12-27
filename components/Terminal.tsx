@@ -278,6 +278,7 @@ export default function Terminal({ server, onDirectoryChange }: TerminalProps) {
     };
 
     initTerminal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted]);
 
   const clearLine = (term: any, length: number) => {
@@ -329,7 +330,7 @@ export default function Terminal({ server, onDirectoryChange }: TerminalProps) {
 
           if (isCdCommand) {
             // For cd commands, the last line is the new pwd
-            const outputLines = lines.filter(line => line.trim());
+            const outputLines = lines.filter((line: string) => line.trim());
             if (outputLines.length > 0) {
               const newDir = outputLines[outputLines.length - 1].trim();
               if (newDir.startsWith('/')) {

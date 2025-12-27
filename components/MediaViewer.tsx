@@ -28,6 +28,7 @@ export default function MediaViewer({ server, filePath, fileType, onClose }: Med
         URL.revokeObjectURL(mediaUrl);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filePath]);
 
   const fetchMedia = async () => {

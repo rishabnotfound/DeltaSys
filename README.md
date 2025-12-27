@@ -12,13 +12,29 @@ A modern server management dashboard for monitoring and managing your VPS server
 
 ## Features
 
+### Server Management
 - **Real-time SSH Monitoring** - Live CPU, RAM, disk usage, and network speed tracking
-- **File Manager** - Browse, create, edit, and delete files directly on your servers
-- **Integrated Terminal** - Execute commands via built-in xterm.js terminal
-- **Server Management** - Add, edit, and delete server configurations with SSH verification
-- **Detailed Stats View** - Circular progress bars, network traffic graphs, and system information
-- **Data Import/Export** - Backup and restore your server configurations
-- **Smart Validation** - Prevents duplicate IPs and verifies SSH credentials before saving
+- **Server Cards** - Hover glow effects, copy credentials to clipboard
+- **Smart Validation** - Prevents duplicate IPs and verifies SSH credentials
+- **Data Import/Export** - Backup and restore server configurations
+
+### File Explorer
+- **Hierarchical Sorting** - Hidden files first, then folders A-Z, then files A-Z
+- **Drag & Drop Upload** - 1 file at a time, 100KB max, images & code only
+- **Monaco Code Editor** - Syntax highlighting, Ctrl+S to save and auto-close
+- **Image Viewer** - Pan with mouse, zoom with scroll wheel (50%-500%)
+- **Smart File Operations** - Create, rename, delete with progress indicators
+
+### Terminal
+- **Full Keybind Support** - Ctrl+C, Ctrl+L, Ctrl+A/E/U/K/W, arrows, Home/End, Delete
+- **Command History** - Navigate with up/down arrows
+- **Directory Persistence** - cd commands persist across sessions
+- **File Explorer Sync** - Terminal directory syncs with file explorer
+
+### UI/UX
+- **Custom Notifications** - Toast messages instead of browser alerts
+- **Loading Progress** - Visual feedback for all operations
+- **Split View** - Resizable file explorer and terminal panels
 
 ## Preview
 
@@ -70,6 +86,7 @@ Visit `http://localhost:3000` to access the dashboard.
 - **Tailwind CSS** - Utility-first styling
 - **node-ssh** - SSH2 client for server connections
 - **xterm.js** - Terminal emulation
+- **Monaco Editor** - VS Code editor for file editing
 
 ## Usage
 
@@ -83,7 +100,10 @@ Visit `http://localhost:3000` to access the dashboard.
 ### Managing Servers
 
 - **View Stats** - Click the graph icon for detailed metrics and network speed
-- **File Manager & Terminal** - Click the terminal icon for full server access
+- **File Explorer & Terminal** - Click the terminal icon for split-view access
+  - Drag files to upload (100KB max, images & code only)
+  - Double-click to edit with Monaco, click images to view with zoom
+  - Use terminal with full keybinds and persistent directories
 - **Edit** - Modify server details (validates SSH connection)
 - **Delete** - Remove server (requires IP confirmation)
 
@@ -105,9 +125,11 @@ For production deployments, implement proper encryption and backend authenticati
 
 ## Configuration
 
-Edit `config.js` to customize the project name:
+Edit `config.js` to customize:
 ```js
 export const project_name = 'DeltaSys';
+export const ascii_art = '...'; // Terminal welcome ASCII art
+export const terminal_welcome_message = '...'; // Terminal welcome text
 ```
 
 ## License
