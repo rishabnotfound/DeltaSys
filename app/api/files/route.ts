@@ -6,7 +6,7 @@ interface FileRequest {
   username: string;
   password: string;
   port: number;
-  action: 'list' | 'read' | 'write' | 'delete' | 'mkdir' | 'rename' | 'upload';
+  action: 'list' | 'read' | 'write' | 'delete' | 'mkdir' | 'rename' | 'upload' | 'download';
   path: string;
   content?: string;
   newPath?: string;
@@ -73,12 +73,54 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, content: result.stdout }, { headers: noCacheHeaders });
       }
 
-      case 'write': {
-        // Escape content for safe transmission
-        const escapedContent = body.content?.replace(/'/g, "'\\''") || '';
-        await ssh.execCommand(`echo '${escapedContent}' > "${body.path}"`);
+      case 'download': {
+        // Download binary files (images, videos) as base64
+        const result = await ssh.execCommand(`base64 "${body.path}"`);
         ssh.dispose();
-        return NextResponse.json({ success: true }, { headers: noCacheHeaders });
+        return NextResponse.json({ success: true, content: result.stdout }, { headers: noCacheHeaders });
+      }
+
+      case 'write': {
+        if (!body.content && body.content !== '') {
+          ssh.dispose();
+          return NextResponse.json(
+            { success: false, error: 'No content provided' },
+            { status: 400, headers: noCacheHeaders }
+          );
+        }
+
+        try {
+          if (body.encoding === 'base64') {
+            // Write base64 to temp file first, then decode (handles large content)
+            const tempFile = `/tmp/write_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+            // Use cat with heredoc to write base64 (no escaping issues, no length limits)
+            const result = await ssh.execCommand(
+              `cat > "${tempFile}.b64" << 'EOF_BASE64_CONTENT'\n${body.content}\nEOF_BASE64_CONTENT\nbase64 -d "${tempFile}.b64" > "${body.path}" && chmod 644 "${body.path}" && rm -f "${tempFile}.b64"`
+            );
+
+            if (result.code !== 0) {
+              ssh.dispose();
+              return NextResponse.json(
+                { success: false, error: result.stderr || 'Write command failed' },
+                { status: 500, headers: noCacheHeaders }
+              );
+            }
+          } else {
+            // Legacy plain text write
+            const escapedContent = body.content.replace(/'/g, "'\\''");
+            await ssh.execCommand(`echo '${escapedContent}' > "${body.path}"`);
+          }
+
+          ssh.dispose();
+          return NextResponse.json({ success: true }, { headers: noCacheHeaders });
+        } catch (writeError: any) {
+          ssh.dispose();
+          return NextResponse.json(
+            { success: false, error: writeError.message || 'Write failed' },
+            { status: 500, headers: noCacheHeaders }
+          );
+        }
       }
 
       case 'upload': {

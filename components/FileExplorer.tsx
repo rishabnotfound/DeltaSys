@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Server } from '@/types';
 import FileEditor from './FileEditor';
+import MediaViewer from './MediaViewer';
 import Notification from './Notification';
 
 interface FileItem {
@@ -15,13 +16,16 @@ interface FileItem {
 
 interface FileExplorerProps {
   server: Server;
+  externalPath?: string;
+  onPathChange?: (path: string) => void;
 }
 
-export default function FileExplorer({ server }: FileExplorerProps) {
+export default function FileExplorer({ server, externalPath, onPathChange }: FileExplorerProps) {
   const [currentPath, setCurrentPath] = useState('/root');
   const [files, setFiles] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingFile, setEditingFile] = useState<{ path: string; content: string } | null>(null);
+  const [viewingMedia, setViewingMedia] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -73,6 +77,10 @@ export default function FileExplorer({ server }: FileExplorerProps) {
       if (data.success) {
         setFiles(sortFiles(data.files));
         setCurrentPath(path);
+        // Notify parent of path change
+        if (onPathChange) {
+          onPathChange(path);
+        }
       }
     } catch (error) {
       console.error('Failed to load directory:', error);
@@ -291,14 +299,87 @@ export default function FileExplorer({ server }: FileExplorerProps) {
     loadDirectory(currentPath);
   }, []);
 
+  // Sync with external path changes (from Terminal cd commands)
+  useEffect(() => {
+    if (externalPath && externalPath !== currentPath) {
+      loadDirectory(externalPath);
+    }
+  }, [externalPath]);
+
+  const isImageFile = (filename: string): boolean => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico'].includes(ext || '');
+  };
+
+  const isVideoFile = (filename: string): boolean => {
+    const ext = filename.split('.').pop()?.toLowerCase();
+    return ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv', 'flv', 'wmv'].includes(ext || '');
+  };
+
   const handleFileClick = (file: FileItem) => {
     const fullPath = `${currentPath}/${file.name}`.replace('//', '/');
 
     if (file.isDirectory) {
       loadDirectory(fullPath);
-    } else {
-      readFile(fullPath);
+      return;
     }
+
+    // Parse file size (can be in B, K, M, G format)
+    const parseFileSize = (sizeStr: string): number => {
+      const match = sizeStr.match(/^([\d.]+)([BKMG]?)$/i);
+      if (!match) return 0;
+
+      const value = parseFloat(match[1]);
+      const unit = match[2].toUpperCase();
+
+      const multipliers: { [key: string]: number } = {
+        'B': 1,
+        'K': 1024,
+        'M': 1024 * 1024,
+        'G': 1024 * 1024 * 1024,
+        '': 1, // bytes
+      };
+
+      return value * (multipliers[unit] || 1);
+    };
+
+    const fileSizeBytes = parseFileSize(file.size);
+    const maxPreviewSize = 100 * 1024; // 100KB
+
+    // Block video previews entirely
+    if (isVideoFile(file.name)) {
+      setNotification({
+        message: 'Video preview not supported. Videos cannot be previewed due to size limitations.',
+        type: 'error'
+      });
+      return;
+    }
+
+    // Check file size for image preview
+    if (isImageFile(file.name)) {
+      if (fileSizeBytes > maxPreviewSize) {
+        const fileSizeKB = Math.round(fileSizeBytes / 1024);
+        setNotification({
+          message: `Image too large to preview: ${fileSizeKB}KB. Maximum: 100KB`,
+          type: 'error'
+        });
+        return;
+      }
+      setViewingMedia(fullPath);
+      return;
+    }
+
+    // Text/code files - also check size
+    if (fileSizeBytes > maxPreviewSize) {
+      const fileSizeKB = Math.round(fileSizeBytes / 1024);
+      setNotification({
+        message: `File too large to preview: ${fileSizeKB}KB. Maximum: 100KB`,
+        type: 'error'
+      });
+      return;
+    }
+
+    readFile(fullPath);
   };
 
   const goUp = () => {
@@ -327,6 +408,26 @@ export default function FileExplorer({ server }: FileExplorerProps) {
     }
   };
 
+  const isAllowedFileType = (filename: string): boolean => {
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    // Allowed: images and common code/text files
+    const allowedExtensions = [
+      // Images
+      'jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'ico',
+      'avif', 'heic', 'heif', 'tiff', 'tif',
+      // Code / Text
+      'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs',
+      'json', 'html', 'css', 'scss', 'sass',
+      'py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'hpp', 'cs',
+      'php', 'sh', 'bash', 'zsh', 'ps1', 'bat', 'cmd',
+      'yaml', 'yml', 'xml', 'toml', 'ini',
+      'md', 'txt', 'log', 'env', 'conf', 'config',
+      'sql', 'graphql', 'proto',
+      'vue', 'svelte', 'astro'
+    ];
+    return allowedExtensions.includes(ext);
+  };
+
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -335,19 +436,45 @@ export default function FileExplorer({ server }: FileExplorerProps) {
     const droppedFiles = Array.from(e.dataTransfer.files);
     if (droppedFiles.length === 0) return;
 
-    // Safety checks
-    const maxFileSize = 100 * 1024 * 1024; // 100MB limit per file
-    const maxTotalFiles = 10; // Max 10 files at once
+    // STRICT UPLOAD RULES
+    const maxFileSize = 100 * 1024; // 100KB limit (base64 encoding limitation)
+    const maxFiles = 1; // Only 1 file at a time
 
-    if (droppedFiles.length > maxTotalFiles) {
-      setNotification({ message: `Maximum ${maxTotalFiles} files allowed at once`, type: 'error' });
+    // Rule 1: Only 1 file at a time
+    if (droppedFiles.length > maxFiles) {
+      setNotification({
+        message: `Upload 1 file at a time only. You tried to upload ${droppedFiles.length} files.`,
+        type: 'error'
+      });
       return;
     }
 
-    const oversizedFiles = droppedFiles.filter(file => file.size > maxFileSize);
-    if (oversizedFiles.length > 0) {
+    const file = droppedFiles[0];
+
+    // Rule 2 & 3: 100KB limit, no videos
+    if (file.size > maxFileSize) {
+      const fileSizeKB = Math.round(file.size / 1024);
       setNotification({
-        message: `File(s) too large. Maximum size: 100MB`,
+        message: `File too large: ${fileSizeKB}KB. Maximum: 100KB`,
+        type: 'error'
+      });
+      return;
+    }
+
+    // Rule 3: No videos allowed
+    if (isVideoFile(file.name)) {
+      setNotification({
+        message: 'Video uploads not allowed. Only images and code files under 100KB.',
+        type: 'error'
+      });
+      return;
+    }
+
+    // Rule 4: Only allowed file types (images and code)
+    if (!isAllowedFileType(file.name)) {
+      const ext = file.name.split('.').pop()?.toUpperCase() || 'unknown';
+      setNotification({
+        message: `File type .${ext} not allowed. Only images and code files supported.`,
         type: 'error'
       });
       return;
@@ -357,18 +484,15 @@ export default function FileExplorer({ server }: FileExplorerProps) {
     setOperationInProgress(true);
 
     try {
-      for (const file of droppedFiles) {
-        await uploadFile(file);
-      }
-      // Refresh directory after all uploads complete
+      await uploadFile(file);
       await loadDirectory(currentPath);
       setNotification({
-        message: `Successfully uploaded ${droppedFiles.length} file(s)!`,
+        message: `Successfully uploaded ${file.name}!`,
         type: 'success'
       });
     } catch (error) {
       console.error('Upload error:', error);
-      setNotification({ message: 'Failed to upload one or more files', type: 'error' });
+      setNotification({ message: 'Failed to upload file', type: 'error' });
     } finally {
       setUploading(false);
       setOperationInProgress(false);
@@ -499,8 +623,9 @@ export default function FileExplorer({ server }: FileExplorerProps) {
                   <svg className="w-16 h-16 text-accent mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
-                  <p className="text-white text-lg font-bold text-center">Drop files here to upload</p>
-                  <p className="text-gray-400 text-sm text-center mt-2">Max 10 files, 100MB each</p>
+                  <p className="text-white text-lg font-bold text-center">Drop file here to upload</p>
+                  <p className="text-gray-400 text-sm text-center mt-2">1 file at a time, max 100KB</p>
+                  <p className="text-gray-500 text-xs text-center mt-1">Images & code only • No videos</p>
                 </div>
               </div>
             )}
@@ -524,6 +649,8 @@ export default function FileExplorer({ server }: FileExplorerProps) {
               <div className="divide-y divide-border">
                 {files.map((file, idx) => {
                   const isHidden = file.name.startsWith('.');
+                  const isImage = isImageFile(file.name);
+                  const isVideo = isVideoFile(file.name);
                   return (
                   <div
                     key={idx}
@@ -534,6 +661,14 @@ export default function FileExplorer({ server }: FileExplorerProps) {
                         <svg className="w-4 h-4 text-accent flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
                         </svg>
+                      ) : isImage ? (
+                        <svg className="w-4 h-4 text-purple-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      ) : isVideo ? (
+                        <svg className="w-4 h-4 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
                       ) : (
                         <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
@@ -542,6 +677,12 @@ export default function FileExplorer({ server }: FileExplorerProps) {
                       <span className="text-white font-mono text-xs truncate">{file.name}</span>
                       {isHidden && (
                         <span className="text-xs text-gray-500 px-1.5 py-0.5 bg-gray-700/30 rounded">hidden</span>
+                      )}
+                      {isImage && (
+                        <span className="text-xs text-purple-400 px-1.5 py-0.5 bg-purple-500/10 rounded">image</span>
+                      )}
+                      {isVideo && (
+                        <span className="text-xs text-blue-400 px-1.5 py-0.5 bg-blue-500/10 rounded">video</span>
                       )}
                       <span className="text-gray-500 text-xs ml-auto flex-shrink-0">{file.size}</span>
                     </div>
@@ -591,6 +732,16 @@ export default function FileExplorer({ server }: FileExplorerProps) {
           // Optionally refresh the directory after save
           // loadDirectory(currentPath);
         }}
+      />
+    )}
+
+    {/* Media Viewer Modal */}
+    {viewingMedia && (
+      <MediaViewer
+        server={server}
+        filePath={viewingMedia}
+        fileType="image"
+        onClose={() => setViewingMedia(null)}
       />
     )}
 

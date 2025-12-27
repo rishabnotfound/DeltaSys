@@ -13,6 +13,7 @@ interface ServerManagerProps {
 export default function ServerManager({ server, onClose }: ServerManagerProps) {
   const [explorerWidth, setExplorerWidth] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
+  const [currentDirectory, setCurrentDirectory] = useState('/root');
 
   const handleMouseDown = () => {
     setIsDragging(true);
@@ -66,7 +67,11 @@ export default function ServerManager({ server, onClose }: ServerManagerProps) {
             className="border-r border-border overflow-hidden"
             style={{ width: `${explorerWidth}%` }}
           >
-            <FileExplorer server={server} />
+            <FileExplorer
+              server={server}
+              externalPath={currentDirectory}
+              onPathChange={setCurrentDirectory}
+            />
           </div>
 
           {/* Resizer */}
@@ -80,7 +85,10 @@ export default function ServerManager({ server, onClose }: ServerManagerProps) {
             className="overflow-hidden"
             style={{ width: `${250 - explorerWidth}%` }}
           >
-            <Terminal server={server} />
+            <Terminal
+              server={server}
+              onDirectoryChange={setCurrentDirectory}
+            />
           </div>
         </div>
       </div>

@@ -79,6 +79,9 @@ export default function FileEditor({ server, filePath, initialContent, onClose, 
     setSaved(false);
 
     try {
+      // Encode content as base64 to avoid JSON escaping issues
+      const base64Content = btoa(unescape(encodeURIComponent(content)));
+
       const response = await fetch('/api/files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -89,7 +92,8 @@ export default function FileEditor({ server, filePath, initialContent, onClose, 
           port: server.port,
           action: 'write',
           path: filePath,
-          content: content,
+          content: base64Content,
+          encoding: 'base64',
         }),
       });
 
@@ -97,7 +101,10 @@ export default function FileEditor({ server, filePath, initialContent, onClose, 
       if (data.success) {
         setSaved(true);
         if (onSave) onSave(content);
-        setTimeout(() => setSaved(false), 2000);
+        // Close editor immediately after successful save
+        setTimeout(() => {
+          onClose();
+        }, 300); // Small delay to show "Saved!" message
       } else {
         alert('Failed to save file: ' + data.error);
       }

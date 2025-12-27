@@ -3,18 +3,20 @@
 import { useEffect, useRef, useState } from 'react';
 import { Server } from '@/types';
 import '@xterm/xterm/css/xterm.css';
+import { ascii_art, terminal_welcome_message } from '../config.js';
 
 interface TerminalProps {
   server: Server;
+  onDirectoryChange?: (path: string) => void;
 }
 
-export default function Terminal({ server }: TerminalProps) {
+export default function Terminal({ server, onDirectoryChange }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<any>(null);
   const fitAddonRef = useRef<any>(null);
-  const [currentCommand, setCurrentCommand] = useState('');
-  const [commandHistory, setCommandHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
+  const commandHistoryRef = useRef<string[]>([]);
+  const historyIndexRef = useRef(-1);
+  const currentDirRef = useRef<string>('/root'); // Track current working directory
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -64,13 +66,104 @@ export default function Terminal({ server }: TerminalProps) {
       fitAddonRef.current = fitAddon;
 
       term.writeln(`\x1b[1;36mConnected to ${server.nickname} (${server.ipAddress})\x1b[0m`);
+      term.writeln(`\x1b[1;36m${ascii_art}\x1b[0m`);
+      term.writeln(`\x1b[1;36m${terminal_welcome_message}\x1b[0m`);
       term.writeln('');
       writePrompt(term);
 
       let lineBuffer = '';
+      let cursorPos = 0; // Cursor position within the line
 
       term.onData((data: string) => {
         const code = data.charCodeAt(0);
+
+        // Ctrl+C - Cancel current command
+        if (code === 3) {
+          term.write('^C\r\n');
+          lineBuffer = '';
+          cursorPos = 0;
+          historyIndexRef.current = -1;
+          writePrompt(term);
+          return;
+        }
+
+        // Ctrl+L - Clear screen
+        if (code === 12) {
+          term.clear();
+          writePrompt(term);
+          term.write(lineBuffer);
+          // Move cursor back to correct position
+          if (cursorPos < lineBuffer.length) {
+            term.write('\x1b[' + (lineBuffer.length - cursorPos) + 'D');
+          }
+          return;
+        }
+
+        // Ctrl+A - Move to start of line
+        if (code === 1) {
+          if (cursorPos > 0) {
+            term.write('\x1b[' + cursorPos + 'D');
+            cursorPos = 0;
+          }
+          return;
+        }
+
+        // Ctrl+E - Move to end of line
+        if (code === 5) {
+          if (cursorPos < lineBuffer.length) {
+            term.write('\x1b[' + (lineBuffer.length - cursorPos) + 'C');
+            cursorPos = lineBuffer.length;
+          }
+          return;
+        }
+
+        // Ctrl+U - Clear line before cursor
+        if (code === 21) {
+          if (cursorPos > 0) {
+            const remaining = lineBuffer.slice(cursorPos);
+            lineBuffer = remaining;
+            // Move cursor to start and rewrite
+            term.write('\r\x1b[K');
+            writePrompt(term);
+            term.write(lineBuffer);
+            cursorPos = 0;
+            if (lineBuffer.length > 0) {
+              term.write('\x1b[' + lineBuffer.length + 'D');
+            }
+          }
+          return;
+        }
+
+        // Ctrl+K - Clear line after cursor
+        if (code === 11) {
+          if (cursorPos < lineBuffer.length) {
+            lineBuffer = lineBuffer.slice(0, cursorPos);
+            term.write('\x1b[K');
+          }
+          return;
+        }
+
+        // Ctrl+W - Delete word before cursor
+        if (code === 23) {
+          if (cursorPos > 0) {
+            const beforeCursor = lineBuffer.slice(0, cursorPos);
+            const afterCursor = lineBuffer.slice(cursorPos);
+            const match = beforeCursor.match(/\s*\S+\s*$/);
+            if (match) {
+              const deleteCount = match[0].length;
+              lineBuffer = lineBuffer.slice(0, cursorPos - deleteCount) + afterCursor;
+              cursorPos -= deleteCount;
+              // Redraw line
+              term.write('\r\x1b[K');
+              writePrompt(term);
+              term.write(lineBuffer);
+              if (cursorPos < lineBuffer.length) {
+                term.write('\x1b[' + (lineBuffer.length - cursorPos) + 'D');
+              }
+            }
+          }
+          return;
+        }
 
         if (code === 13) {
           // Enter
@@ -79,58 +172,96 @@ export default function Terminal({ server }: TerminalProps) {
 
           if (command) {
             executeCommand(command, term);
-            setCommandHistory(prev => [...prev, command]);
+            commandHistoryRef.current.push(command);
           } else {
             writePrompt(term);
           }
 
           lineBuffer = '';
-          setCurrentCommand('');
-          setHistoryIndex(-1);
+          cursorPos = 0;
+          historyIndexRef.current = -1;
         } else if (code === 127) {
           // Backspace
-          if (lineBuffer.length > 0) {
-            lineBuffer = lineBuffer.slice(0, -1);
-            term.write('\b \b');
-            setCurrentCommand(lineBuffer);
+          if (cursorPos > 0) {
+            lineBuffer = lineBuffer.slice(0, cursorPos - 1) + lineBuffer.slice(cursorPos);
+            cursorPos--;
+            // Redraw from cursor position
+            term.write('\b');
+            term.write(lineBuffer.slice(cursorPos) + ' ');
+            term.write('\x1b[' + (lineBuffer.length - cursorPos + 1) + 'D');
           }
         } else if (code === 27) {
-          // Escape sequences (arrow keys)
+          // Escape sequences (arrow keys, etc.)
           if (data === '\x1b[A') {
-            // Up arrow
-            if (commandHistory.length > 0) {
-              const newIndex = historyIndex < commandHistory.length - 1 ? historyIndex + 1 : historyIndex;
-              const cmd = commandHistory[commandHistory.length - 1 - newIndex];
+            // Up arrow - Previous command in history
+            if (commandHistoryRef.current.length > 0) {
+              const newIndex = historyIndexRef.current < commandHistoryRef.current.length - 1 ? historyIndexRef.current + 1 : historyIndexRef.current;
+              const cmd = commandHistoryRef.current[commandHistoryRef.current.length - 1 - newIndex];
               if (cmd) {
                 clearLine(term, lineBuffer.length);
                 term.write(cmd);
                 lineBuffer = cmd;
-                setCurrentCommand(cmd);
-                setHistoryIndex(newIndex);
+                cursorPos = cmd.length;
+                historyIndexRef.current = newIndex;
               }
             }
           } else if (data === '\x1b[B') {
-            // Down arrow
-            if (historyIndex > 0) {
-              const newIndex = historyIndex - 1;
-              const cmd = commandHistory[commandHistory.length - 1 - newIndex];
+            // Down arrow - Next command in history
+            if (historyIndexRef.current > 0) {
+              const newIndex = historyIndexRef.current - 1;
+              const cmd = commandHistoryRef.current[commandHistoryRef.current.length - 1 - newIndex];
               clearLine(term, lineBuffer.length);
               term.write(cmd);
               lineBuffer = cmd;
-              setCurrentCommand(cmd);
-              setHistoryIndex(newIndex);
-            } else if (historyIndex === 0) {
+              cursorPos = cmd.length;
+              historyIndexRef.current = newIndex;
+            } else if (historyIndexRef.current === 0) {
               clearLine(term, lineBuffer.length);
               lineBuffer = '';
-              setCurrentCommand('');
-              setHistoryIndex(-1);
+              cursorPos = 0;
+              historyIndexRef.current = -1;
+            }
+          } else if (data === '\x1b[C') {
+            // Right arrow - Move cursor right
+            if (cursorPos < lineBuffer.length) {
+              term.write('\x1b[C');
+              cursorPos++;
+            }
+          } else if (data === '\x1b[D') {
+            // Left arrow - Move cursor left
+            if (cursorPos > 0) {
+              term.write('\x1b[D');
+              cursorPos--;
+            }
+          } else if (data === '\x1b[3~') {
+            // Delete key - Delete character at cursor
+            if (cursorPos < lineBuffer.length) {
+              lineBuffer = lineBuffer.slice(0, cursorPos) + lineBuffer.slice(cursorPos + 1);
+              term.write(lineBuffer.slice(cursorPos) + ' ');
+              term.write('\x1b[' + (lineBuffer.length - cursorPos + 1) + 'D');
+            }
+          } else if (data === '\x1b[H') {
+            // Home key - Move to start
+            if (cursorPos > 0) {
+              term.write('\x1b[' + cursorPos + 'D');
+              cursorPos = 0;
+            }
+          } else if (data === '\x1b[F') {
+            // End key - Move to end
+            if (cursorPos < lineBuffer.length) {
+              term.write('\x1b[' + (lineBuffer.length - cursorPos) + 'C');
+              cursorPos = lineBuffer.length;
             }
           }
         } else if (code >= 32) {
-          // Printable characters
-          lineBuffer += data;
-          term.write(data);
-          setCurrentCommand(lineBuffer);
+          // Printable characters - Insert at cursor position
+          lineBuffer = lineBuffer.slice(0, cursorPos) + data + lineBuffer.slice(cursorPos);
+          cursorPos++;
+          // Redraw from cursor position
+          term.write(lineBuffer.slice(cursorPos - 1));
+          if (cursorPos < lineBuffer.length) {
+            term.write('\x1b[' + (lineBuffer.length - cursorPos) + 'D');
+          }
         }
       });
 
@@ -150,16 +281,33 @@ export default function Terminal({ server }: TerminalProps) {
   }, [mounted]);
 
   const clearLine = (term: any, length: number) => {
-    term.write('\r' + ' '.repeat(length + 2) + '\r');
-    term.write('\x1b[1;32m$\x1b[0m ');
+    // Get current dir for prompt
+    const dir = currentDirRef.current.replace(/^\/root/, '~');
+    term.write('\r' + ' '.repeat(length + dir.length + 4) + '\r');
+    term.write(`\x1b[1;34m${dir}\x1b[0m \x1b[1;32m$\x1b[0m `);
   };
 
   const writePrompt = (term: any) => {
-    term.write('\x1b[1;32m$\x1b[0m ');
+    // Show current directory in prompt
+    const dir = currentDirRef.current.replace(/^\/root/, '~');
+    term.write(`\x1b[1;34m${dir}\x1b[0m \x1b[1;32m$\x1b[0m `);
   };
 
   const executeCommand = async (command: string, term: any) => {
     try {
+      let actualCommand = command;
+      let isCdCommand = false;
+
+      // Handle cd commands specially to maintain working directory
+      if (command.trim().startsWith('cd ') || command.trim() === 'cd') {
+        isCdCommand = true;
+        // Execute cd and get new working directory
+        actualCommand = `cd ${currentDirRef.current} && ${command} && pwd`;
+      } else {
+        // Prepend current directory to all other commands
+        actualCommand = `cd ${currentDirRef.current} && ${command}`;
+      }
+
       const response = await fetch('/api/terminal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -168,7 +316,7 @@ export default function Terminal({ server }: TerminalProps) {
           username: server.username,
           password: server.password,
           port: server.port,
-          command,
+          command: actualCommand,
         }),
       });
 
@@ -178,9 +326,26 @@ export default function Terminal({ server }: TerminalProps) {
         if (data.stdout) {
           // Write each line separately to preserve formatting
           const lines = data.stdout.split('\n');
-          lines.forEach((line: string) => {
-            term.writeln(line);
-          });
+
+          if (isCdCommand) {
+            // For cd commands, the last line is the new pwd
+            const outputLines = lines.filter(line => line.trim());
+            if (outputLines.length > 0) {
+              const newDir = outputLines[outputLines.length - 1].trim();
+              if (newDir.startsWith('/')) {
+                currentDirRef.current = newDir;
+                // Notify parent component of directory change
+                if (onDirectoryChange) {
+                  onDirectoryChange(newDir);
+                }
+              }
+            }
+            // Don't print pwd output for cd commands
+          } else {
+            lines.forEach((line: string) => {
+              term.writeln(line);
+            });
+          }
         }
         if (data.stderr) {
           const lines = data.stderr.split('\n');
