@@ -295,8 +295,8 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6 flex flex-col sm:flex-row gap-4">
+      <main className="px-4 sm:px-6 lg:px-8 py-8">
+        <div className="max-w-7xl mx-auto mb-6 flex flex-col sm:flex-row gap-4">
           <div className="flex-1">
             <input
               type="text"
@@ -344,7 +344,7 @@ export default function Home() {
             <p className="text-gray-400">No servers match your search</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">
             {sortedServers.map(server => (
               <ServerCard
                 key={server.id}
