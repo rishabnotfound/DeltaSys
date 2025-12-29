@@ -23,7 +23,7 @@ export default function Home() {
   const [managerServer, setManagerServer] = useState<Server | undefined>();
   const [detailsServer, setDetailsServer] = useState<Server | undefined>();
   const [showSettings, setShowSettings] = useState(false);
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | 'info'; duration?: number } | null>(null);
 
   useEffect(() => {
     setServers(storage.getServers());
@@ -35,8 +35,12 @@ export default function Home() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      let updated = false;
-      const renewedServers = servers.map(server => {
+      // Load fresh data from storage to avoid stale state
+      const currentServers = storage.getServers();
+      const renewedServersList: string[] = [];
+      let hasUpdates = false;
+
+      const updatedServers = currentServers.map(server => {
         if (!server.renewalPeriod || server.renewalPeriod === 'off') return server;
 
         const expiryDate = new Date(server.expiryDate);
@@ -54,17 +58,14 @@ export default function Home() {
           }
 
           if (renewalDays > 0) {
-            const newExpiryDate = new Date(expiryDate);
+            // Calculate new expiry date from today, not from old expiry date
+            const newExpiryDate = new Date(today);
             newExpiryDate.setDate(newExpiryDate.getDate() + renewalDays);
 
             const renewedServer = { ...server, expiryDate: newExpiryDate.toISOString().split('T')[0] };
             storage.updateServer(server.id, renewedServer);
-            updated = true;
-
-            setNotification({
-              message: `${server.nickname} auto-renewed until ${renewedServer.expiryDate}`,
-              type: 'success'
-            });
+            hasUpdates = true;
+            renewedServersList.push(`${server.nickname} → ${renewedServer.expiryDate}`);
 
             return renewedServer;
           }
@@ -73,18 +74,29 @@ export default function Home() {
         return server;
       });
 
-      if (updated) {
-        setServers(renewedServers);
+      if (hasUpdates) {
+        setServers(updatedServers);
+
+        // Show notification with all renewed servers
+        const message = renewedServersList.length === 1
+          ? `Auto-renewed: ${renewedServersList[0]}`
+          : `Auto-renewed ${renewedServersList.length} servers:\n${renewedServersList.join('\n')}`;
+
+        setNotification({
+          message,
+          type: 'success',
+          duration: 5000 // 5 seconds for renewal notifications
+        });
       }
     };
 
     // Check on mount
     checkAndRenewServers();
 
-    // Check daily
-    const interval = setInterval(checkAndRenewServers, 24 * 60 * 60 * 1000);
+    // Check every hour (not just daily, to catch changes faster)
+    const interval = setInterval(checkAndRenewServers, 60 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [servers]);
+  }, []); // Empty dependency array - only run on mount
 
   const fetchServerStats = async (server: Server) => {
     try {
@@ -407,6 +419,7 @@ export default function Home() {
         <Notification
           message={notification.message}
           type={notification.type}
+          duration={notification.duration}
           onClose={() => setNotification(null)}
         />
       )}
